@@ -1,0 +1,230 @@
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { useLocation } from "react-router-dom";
+
+const VerifyEmail = () => {
+  const location = useLocation();
+  const passedEmail = location?.state?.email || "";
+
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [success, setSuccess] = useState("");
+  const [error, setError] = useState("");
+  const [timeLeft, setTimeLeft] = useState(600);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+
+  const baseURL = import.meta.env.VITE_DataHost;
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+    const t = setInterval(() => setTimeLeft((p) => p - 1), 1000);
+    return () => clearInterval(t);
+  }, [timeLeft]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setInterval(() => setResendCooldown((p) => p - 1), 1000);
+    return () => clearInterval(t);
+  }, [resendCooldown]);
+
+  const formatTime = () => {
+    const m = Math.floor(timeLeft / 60);
+    const s = timeLeft % 60;
+    return `${m}:${s < 10 ? "0" : ""}${s}`;
+  };
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    setLoading(true);
+
+    if (!passedEmail) {
+      setError("Something went wrong! Please register again.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${baseURL}/api/auth/verify-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: passedEmail, code }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Verification Failed");
+        setLoading(false);
+        return;
+      }
+
+      setSuccess("Email Verified Successfully! Redirecting to login...");
+      setTimeout(() => (window.location.href = "/login"), 1200);
+    } catch {
+      setError("Something went wrong");
+    }
+
+    setLoading(false);
+  };
+
+  const handleResend = async () => {
+    setError("");
+    setSuccess("");
+    setResending(true);
+
+    try {
+      const res = await fetch(`${baseURL}/api/auth/resend-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: passedEmail }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Failed to resend code");
+
+        const sec = parseInt(data.message?.match(/\d+/)?.[0]);
+        if (!isNaN(sec)) setResendCooldown(sec);
+
+        setResending(false);
+        return;
+      }
+
+      setSuccess("A new verification code has been sent!");
+      setTimeLeft(600);
+      setResendCooldown(30);
+    } catch {
+      setError("Something went wrong");
+    }
+
+    setResending(false);
+  };
+
+  return (
+    <div className="relative min-h-screen flex items-center justify-center bg-black overflow-hidden px-4 sm:px-6">
+      <motion.div
+        className="absolute inset-0 bg-gradient-to-br from-blue-900/20 via-purple-900/10 to-black"
+        animate={{ backgroundPosition: ["0% 0%", "100% 100%", "0% 0%"] }}
+        transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+        style={{ backgroundSize: "200% 200%" }}
+      />
+
+      <motion.div
+        className={`absolute ${
+          isMobile ? "w-52 h-52" : "w-[420px] h-[420px]"
+        } bg-blue-600/30 rounded-full blur-3xl left-[-120px] top-[10%]`}
+        animate={{ y: [0, 35, 0], scale: [1, 1.06, 1] }}
+        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      <motion.div
+        className={`absolute ${
+          isMobile ? "w-52 h-52" : "w-[420px] h-[420px]"
+        } bg-purple-600/30 rounded-full blur-3xl right-[-120px] bottom-[10%]`}
+        animate={{ y: [0, -35, 0], scale: [1, 1.06, 1] }}
+        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      <motion.div
+        className="relative z-10 w-full max-w-[430px] bg-white/10 border border-white/10 backdrop-blur-2xl rounded-2xl shadow-2xl p-6 sm:p-8 text-center"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6 }}
+      >
+        <h2 className="text-2xl sm:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
+          Verify Your Email
+        </h2>
+
+        <p className="text-gray-300 mt-2 text-sm sm:text-base">
+          Enter the verification code we sent to your email 📩
+        </p>
+
+        {success && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full mt-4 mb-2 bg-green-500/15 border border-green-400/40 text-green-300 py-3 px-4 rounded-xl text-sm"
+          >
+            {success}
+          </motion.div>
+        )}
+
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full mt-4 mb-2 bg-red-500/15 border border-red-400/40 text-red-300 py-3 px-4 rounded-xl text-sm"
+          >
+            {error}
+          </motion.div>
+        )}
+
+        <div className="text-gray-300 text-sm mt-4">
+          OTP Expires In:{" "}
+          <span className="text-blue-400 font-semibold">
+            {timeLeft > 0 ? formatTime() : "Expired"}
+          </span>
+        </div>
+
+        <form onSubmit={handleVerify} className="mt-6 text-left">
+          <label className="text-gray-300 text-sm">Verification Code</label>
+          <input
+            type="text"
+            required
+            maxLength={6}
+            className="w-full mt-1 mb-6 px-4 py-3 text-center tracking-[4px] text-lg rounded-xl bg-black/40 border border-white/20 text-gray-200 focus:ring-2 focus:ring-purple-500 outline-none"
+            placeholder="123456"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+          />
+
+          <button
+            disabled={loading}
+            className="w-full py-3 sm:py-3.5 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold hover:scale-[1.03] active:scale-[0.99] transition-all shadow-lg"
+          >
+            {loading ? "Verifying..." : "Verify Email"}
+          </button>
+        </form>
+
+        <div className="mt-4 text-gray-300 text-sm">
+          Didn't receive code?
+          <button
+            disabled={resending || resendCooldown > 0}
+            onClick={handleResend}
+            className={`ml-2 ${
+              resendCooldown > 0
+                ? "text-gray-500 cursor-not-allowed"
+                : "text-blue-400 hover:underline"
+            }`}
+          >
+            {resending
+              ? "Resending..."
+              : resendCooldown > 0
+              ? `Resend in ${resendCooldown}s`
+              : "Resend Code"}
+          </button>
+        </div>
+      </motion.div>
+
+      <div className="absolute bottom-4 sm:bottom-6 w-full text-center px-4">
+        <p className="text-gray-400 text-xs sm:text-sm tracking-wide">
+          © Neterskill User Portal
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default VerifyEmail;
