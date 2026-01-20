@@ -1,160 +1,281 @@
+// pages/Admin/Dashboard/AdminDashboard.jsx
 import { useEffect, useState } from "react";
 import {
   AreaChart,
   Area,
   XAxis,
+  YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { motion } from "framer-motion";
+import {
+  Users,
+  UserCheck,
+  UserX,
+  Ban,
+  TrendingUp,
+  RefreshCw,
+  ArrowUpRight,
+} from "lucide-react";
 import Loading from "../../../components/Shared/Loading";
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const baseURL = import.meta.env.VITE_DataHost;
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
+        setRefreshing(true);
         const token = localStorage.getItem("adminToken");
         const res = await fetch(`${baseURL}/api/admin/dashboard-stats`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
         setStats(data.stats);
-      } catch (err) {}
-      setLoading(false);
+      } catch (err) {
+        console.error("Failed to fetch stats:", err);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
     };
+
     fetchStats();
-  }, []);
+  }, [baseURL]);
+
+  const handleRefresh = async () => {
+    try {
+      setRefreshing(true);
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch(`${baseURL}/api/admin/dashboard-stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setStats(data.stats);
+    } catch (err) {
+      console.error("Failed to fetch stats:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   if (loading) return <Loading message="Loading Dashboard..." />;
 
-  const chartData = [
-    { name: "Mon", users: 5 },
-    { name: "Tue", users: 9 },
-    { name: "Wed", users: 4 },
-    { name: "Thu", users: 11 },
-    { name: "Fri", users: 7 },
-    { name: "Sat", users: 13 },
-    { name: "Sun", users: 9 },
+  const chartData =
+    stats?.growthLast7Days?.map((item) => ({
+      date: new Date(item._id).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      }),
+      users: item.count,
+    })) || [];
+
+  const statsCards = [
+    {
+      title: "Total Users",
+      value: stats?.totalUsers || 0,
+      icon: Users,
+      color: "from-blue-500 to-blue-600",
+      textColor: "text-blue-600",
+      bgColor: "bg-blue-50",
+      change: "+12.5%",
+    },
+    {
+      title: "Verified Users",
+      value: stats?.verifiedUsers || 0,
+      icon: UserCheck,
+      color: "from-green-500 to-green-600",
+      textColor: "text-green-600",
+      bgColor: "bg-green-50",
+      change: "+8.3%",
+    },
+    {
+      title: "Unverified Users",
+      value: stats?.unverifiedUsers || 0,
+      icon: UserX,
+      color: "from-yellow-500 to-yellow-600",
+      textColor: "text-yellow-600",
+      bgColor: "bg-yellow-50",
+      change: "-3.2%",
+    },
+    {
+      title: "Suspended Users",
+      value: stats?.suspendedUsers || 0,
+      icon: Ban,
+      color: "from-red-500 to-red-600",
+      textColor: "text-red-600",
+      bgColor: "bg-red-50",
+      change: "+1.8%",
+    },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-100 p-3 sm:p-4 md:p-6">
-      <div className="w-full">
-        <div className="mb-5 md:mb-7 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-              Neterskill Admin Dashboard
-            </h1>
-            <p className="text-gray-500 text-sm md:text-base">
-              System overview & user statistics
-            </p>
-          </div>
-
-          <button className="px-4 py-2 bg-indigo-600 text-white rounded shadow hover:bg-indigo-700 transition text-sm md:text-base">
-            Refresh
-          </button>
+    <div className="min-h-screen">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+      >
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            System overview & user statistics
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6 w-full">
-          <DashCard
-            value={stats.totalUsers}
-            label="Total Users"
-            color="bg-blue-500"
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <RefreshCw
+            className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
           />
-          <DashCard
-            value={stats.verifiedUsers}
-            label="Verified Users"
-            color="bg-green-500"
-          />
-          <DashCard
-            value={stats.unverifiedUsers}
-            label="Unverified Users"
-            color="bg-yellow-500"
-          />
-          <DashCard
-            value={stats.suspendedUsers}
-            label="Suspended Users"
-            color="bg-red-500"
-          />
-        </div>
+          Refresh
+        </button>
+      </motion.div>
 
-        <div className="mt-6 md:mt-8 grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 w-full">
-          <div className="col-span-1 lg:col-span-2 bg-white p-4 md:p-6 rounded-xl shadow-lg border w-full">
-            <h2 className="text-base md:text-lg font-semibold text-gray-800 mb-4">
-              Weekly User Growth
-            </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {statsCards.map((card, index) => (
+          <StatCard key={card.title} {...card} index={index} />
+        ))}
+      </div>
 
-            <div className="w-full h-[220px] sm:h-[260px] md:h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="color" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="40%"
-                        stopColor="#4f46e5"
-                        stopOpacity={0.9}
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor="#4f46e5"
-                        stopOpacity={0.1}
-                      />
-                    </linearGradient>
-                  </defs>
-
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <Tooltip />
-                  <Area
-                    type="monotone"
-                    dataKey="users"
-                    stroke="#4f46e5"
-                    fill="url(#color)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-200"
+        >
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                User Growth
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">Last 7 days</p>
+            </div>
+            <div className="flex items-center gap-1 text-green-600 text-sm font-medium">
+              <TrendingUp className="w-4 h-4" />
+              <span>+12.5%</span>
             </div>
           </div>
 
-          <div className="bg-white p-5 md:p-6 rounded-xl shadow-lg border flex flex-col justify-center text-center">
-            <h2 className="text-base md:text-lg font-semibold text-gray-800">
-              Today New Users
-            </h2>
+          <div className="w-full h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient
+                    id="colorGradient"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 12, fill: "#6b7280" }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 12, fill: "#6b7280" }}
+                  tickLine={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#fff",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="users"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  fill="url(#colorGradient)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
 
-            <p className="text-5xl md:text-6xl font-bold text-indigo-600 mt-3 md:mt-4">
-              {stats.todayUsers}
-            </p>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-xl shadow-lg text-white"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold">Today's New Users</h2>
+            <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+              <Users className="w-5 h-5" />
+            </div>
+          </div>
 
-            <p className="text-gray-500 mt-2 text-sm md:text-base">
-              Users registered in last 24 hours
+          <div className="mb-6">
+            <p className="text-5xl font-bold">{stats?.todayUsers || 0}</p>
+            <p className="text-blue-100 text-sm mt-2">
+              Registered in last 24 hours
             </p>
           </div>
-        </div>
 
-        <p className="text-gray-500 mt-10 text-xs md:text-sm text-center">
-          © Neterskill Admin Panel
-        </p>
+          <div className="flex items-center gap-2 text-sm bg-white/10 rounded-lg px-3 py-2">
+            <ArrowUpRight className="w-4 h-4" />
+            <span>+24% from yesterday</span>
+          </div>
+        </motion.div>
       </div>
     </div>
   );
 };
 
-const DashCard = ({ value, label, color }) => {
+const StatCard = ({
+  title,
+  value,
+  icon: Icon,
+  color,
+  textColor,
+  bgColor,
+  change,
+  index,
+}) => {
   return (
-    <div
-      className={`${color} text-white p-5 md:p-6 rounded-xl shadow-xl hover:scale-[1.02] transition`}
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.1 }}
+      className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition"
     >
-      <h1 className="text-3xl md:text-4xl font-bold">{value}</h1>
-      <p className="text-base md:text-lg mt-2">{label}</p>
-
-      <div className="mt-3 md:mt-4 text-xs md:text-sm opacity-90 underline cursor-pointer">
-        More info →
+      <div className="flex items-center justify-between mb-4">
+        <div
+          className={`w-12 h-12 ${bgColor} rounded-lg flex items-center justify-center`}
+        >
+          <Icon className={`w-6 h-6 ${textColor}`} />
+        </div>
+        <span
+          className={`text-xs font-medium ${change.startsWith("+") ? "text-green-600" : "text-red-600"}`}
+        >
+          {change}
+        </span>
       </div>
-    </div>
+
+      <div>
+        <p className="text-2xl font-bold text-gray-900">{value}</p>
+        <p className="text-sm text-gray-500 mt-1">{title}</p>
+      </div>
+    </motion.div>
   );
 };
 
