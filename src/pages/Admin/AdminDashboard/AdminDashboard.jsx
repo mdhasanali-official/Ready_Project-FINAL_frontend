@@ -1,5 +1,5 @@
 // pages/Admin/Dashboard/AdminDashboard.jsx
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   AreaChart,
   Area,
@@ -20,51 +20,31 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import Loading from "../../../components/Shared/Loading";
+import api from "../../../utils/api";
 
 const AdminDashboard = () => {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const baseURL = import.meta.env.VITE_DataHost;
+  const {
+    data: statsData,
+    isLoading,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: async () => {
+      const response = await api.get("/api/admin/dashboard-stats");
+      return response.data;
+    },
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setRefreshing(true);
-        const token = localStorage.getItem("adminToken");
-        const res = await fetch(`${baseURL}/api/admin/dashboard-stats`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        setStats(data.stats);
-      } catch (err) {
-        console.error("Failed to fetch stats:", err);
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    };
+  const stats = statsData?.stats;
 
-    fetchStats();
-  }, [baseURL]);
-
-  const handleRefresh = async () => {
-    try {
-      setRefreshing(true);
-      const token = localStorage.getItem("adminToken");
-      const res = await fetch(`${baseURL}/api/admin/dashboard-stats`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setStats(data.stats);
-    } catch (err) {
-      console.error("Failed to fetch stats:", err);
-    } finally {
-      setRefreshing(false);
-    }
+  const handleRefresh = () => {
+    refetch();
   };
 
-  if (loading) return <Loading message="Loading Dashboard..." />;
+  if (isLoading) return <Loading message="Loading Dashboard..." />;
 
   const chartData =
     stats?.growthLast7Days?.map((item) => ({
@@ -130,11 +110,11 @@ const AdminDashboard = () => {
 
         <button
           onClick={handleRefresh}
-          disabled={refreshing}
+          disabled={isFetching}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <RefreshCw
-            className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+            className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`}
           />
           Refresh
         </button>

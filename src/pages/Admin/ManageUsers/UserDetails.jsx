@@ -1,93 +1,95 @@
-import { useEffect, useState } from "react";
+// pages/Admin/ManageUsers/UserDetails.jsx
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "react-hot-toast";
 import Loading from "../../../components/Shared/Loading";
+import api from "../../../utils/api";
 
 const UserDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const baseURL = import.meta.env.VITE_DataHost;
+  const queryClient = useQueryClient();
 
-  const [user, setUser] = useState(null);
-  const [processing, setProcessing] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    isEmailVerified: false,
+  const { data: userData, isLoading } = useQuery({
+    queryKey: ["user", id],
+    queryFn: async () => {
+      const response = await api.get(`/api/admin/users/${id}`);
+      return response.data;
+    },
+    staleTime: 1 * 60 * 1000,
   });
 
-  const getUser = async () => {
-    try {
-      const token = localStorage.getItem("adminToken");
-      const res = await fetch(`${baseURL}/api/admin/users/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+  const user = userData?.user;
 
-      const data = await res.json();
-      setUser(data.user);
+  const [form, setForm] = useState({
+    name: user?.name || "",
+    email: user?.email || "",
+    isEmailVerified: user?.isEmailVerified || false,
+  });
 
-      setForm({
-        name: data.user.name,
-        email: data.user.email,
-        isEmailVerified: data.user.isEmailVerified,
-      });
-    } catch {}
+  const updateMutation = useMutation({
+    mutationFn: async (updateData) => {
+      const response = await api.put(`/api/admin/users/${id}`, updateData);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["user", id]);
+      queryClient.invalidateQueries(["users"]);
+      toast.success("User updated successfully!");
+    },
+    onError: () => {
+      toast.error("Failed to update user!");
+    },
+  });
+
+  const suspendMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.put(`/api/admin/users/${id}/suspend`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["user", id]);
+      queryClient.invalidateQueries(["users"]);
+      toast.success("User status updated!");
+    },
+    onError: () => {
+      toast.error("Failed to update status!");
+    },
+  });
+
+  const updateUser = () => {
+    updateMutation.mutate({
+      name: form.name,
+      isEmailVerified: form.isEmailVerified,
+    });
   };
 
-  const updateUser = async () => {
-    try {
-      setSaving(true);
-      const token = localStorage.getItem("adminToken");
-
-      await fetch(`${baseURL}/api/admin/users/${id}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: form.name,
-          isEmailVerified: form.isEmailVerified,
-        }),
-      });
-
-      setSaving(false);
-      getUser();
-    } catch {
-      setSaving(false);
-    }
+  const toggleSuspend = () => {
+    suspendMutation.mutate();
   };
 
-  const toggleSuspend = async () => {
-    try {
-      setProcessing(true);
-      const token = localStorage.getItem("adminToken");
+  if (isLoading) return <Loading message="Loading User Details..." />;
 
-      await fetch(`${baseURL}/api/admin/users/${id}/suspend`, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      setProcessing(false);
-      getUser();
-    } catch {
-      setProcessing(false);
-    }
-  };
-
-  useEffect(() => {
-    getUser();
-  }, []);
-
-  if (!user) return <Loading message="Loading User Details..." />;
+  if (!user) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-600">User not found</p>
+        <button
+          onClick={() => navigate(-1)}
+          className="mt-4 px-5 py-2 border rounded hover:bg-gray-100"
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-white shadow-xl rounded-2xl p-7 border max-w-5xl mx-auto w-full">
-      {/* HEADER */}
-      <div className="flex justify-between items-center mb-6">
+    <div className="bg-white shadow-xl rounded-2xl p-4 sm:p-7 border max-w-5xl mx-auto w-full">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
             User Management Panel
           </h1>
           <p className="text-gray-500 text-sm">
@@ -97,15 +99,13 @@ const UserDetails = () => {
 
         <button
           onClick={() => navigate(-1)}
-          className="px-5 py-2 border rounded hover:bg-gray-100"
+          className="px-5 py-2 border rounded hover:bg-gray-100 whitespace-nowrap"
         >
           Back
         </button>
       </div>
 
-      {/* TWO SECTION GRID */}
       <div className="grid md:grid-cols-2 gap-7 text-sm">
-        {/* LEFT SIDE */}
         <div className="space-y-4">
           <h2 className="font-semibold text-gray-700 border-b pb-1">
             Profile Information
@@ -158,7 +158,6 @@ const UserDetails = () => {
           </div>
         </div>
 
-        {/* RIGHT SIDE */}
         <div className="space-y-4">
           <h2 className="font-semibold text-gray-700 border-b pb-1">
             Account Information
@@ -203,21 +202,20 @@ const UserDetails = () => {
               </div>
 
               <span className="text-gray-600 text-sm">
-                {processing ? "Updating..." : ""}
+                {suspendMutation.isPending ? "Updating..." : ""}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* SAVE BUTTON */}
       <div className="flex justify-end mt-8">
         <button
           onClick={updateUser}
-          disabled={saving}
-          className="px-6 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+          disabled={updateMutation.isPending}
+          className="px-6 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {saving ? "Saving..." : "Save Changes"}
+          {updateMutation.isPending ? "Saving..." : "Save Changes"}
         </button>
       </div>
     </div>

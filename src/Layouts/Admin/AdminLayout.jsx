@@ -1,41 +1,43 @@
 // components/AdminLayout.jsx
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
-import { Menu, Bell, Mail, Search, User, Settings, LogOut, UserCircle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Menu,
+  Bell,
+  Mail,
+  Search,
+  User,
+  Settings,
+  LogOut,
+  UserCircle,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import AdminSidebar from "./AdminSidebar";
+import api from "../../utils/api";
 
 const AdminLayout = () => {
   const [open, setOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [adminData, setAdminData] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
   const profileRef = useRef(null);
-  const baseURL = import.meta.env.VITE_DataHost;
+
+  const { data: adminProfile } = useQuery({
+    queryKey: ["admin-profile"],
+    queryFn: async () => {
+      const response = await api.get("/api/admin/profile");
+      return response.data;
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const adminData = adminProfile?.admin;
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
-
-  useEffect(() => {
-    const fetchAdminProfile = async () => {
-      try {
-        const token = localStorage.getItem("adminToken");
-        const res = await fetch(`${baseURL}/api/admin/profile`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (data.admin) {
-          setAdminData(data.admin);
-        }
-      } catch (err) {
-        console.error("Failed to fetch admin profile:", err);
-      }
-    };
-
-    fetchAdminProfile();
-  }, [baseURL]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {

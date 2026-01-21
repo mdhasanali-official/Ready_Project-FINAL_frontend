@@ -10,12 +10,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.90.19",
+    "axios": "^1.13.2",
     "framer-motion": "^12.27.5",
     "localforage": "^1.10.0",
     "lucide-react": "^0.562.0",
     "match-sorter": "^8.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.11.0",
     "recharts": "^3.6.0",
     "sort-by": "^1.2.0"
