@@ -1,21 +1,15 @@
-//src/pages/UserProfile.jsx
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { User, Settings, Shield } from "lucide-react";
+//src/pages/Users/Profile/UserProfile.jsx
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "react-hot-toast";
+import { User, Settings, Shield, Loader2 } from "lucide-react";
+import api from "../../../utils/api";
 
 const UserProfile = () => {
-  const baseURL = import.meta.env.VITE_DataHost;
-  const token =
-    typeof localStorage !== "undefined"
-      ? localStorage.getItem("userToken")
-      : null;
-
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState("");
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("profile");
   const [isMobile, setIsMobile] = useState(false);
-
   const [editMode, setEditMode] = useState(false);
 
   const [form, setForm] = useState({
@@ -29,73 +23,84 @@ const UserProfile = () => {
     profileImage: "",
   });
 
-  useEffect(() => {
+  // Check mobile on mount and resize
+  useState(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
-  }, []);
+  });
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+  const { data: userData, isLoading } = useQuery({
+    queryKey: ["user-profile"],
+    queryFn: async () => {
+      const response = await api.get("/api/auth/profile");
+      return response.data;
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    onSuccess: (data) => {
+      // Set form data when query succeeds
+      if (data?.user) {
+        setForm({
+          name: data.user.name || "",
+          phone: data.user.phone || "",
+          bio: data.user.bio || "",
+          address: data.user.address || "",
+          country: data.user.country || "",
+          city: data.user.city || "",
+          zip: data.user.zip || "",
+          profileImage: data.user.profileImage || "",
+        });
+      }
+    },
+  });
 
-  const fetchProfile = async () => {
-    try {
-      const res = await fetch(`${baseURL}/api/auth/profile`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+  const user = userData?.user;
 
-      const data = await res.json();
-      if (!res.ok) return setMsg(data.message);
-
-      setUser(data.user);
-
-      setForm({
-        name: data.user?.name || "",
-        phone: data.user?.phone || "",
-        bio: data.user?.bio || "",
-        address: data.user?.address || "",
-        country: data.user?.country || "",
-        city: data.user?.city || "",
-        zip: data.user?.zip || "",
-        profileImage: data.user?.profileImage || "",
-      });
-    } catch {
-      setMsg("Failed to load profile");
-    }
-    setLoading(false);
-  };
-
-  const updateProfile = async () => {
-    setMsg("");
-
-    try {
-      const res = await fetch(`${baseURL}/api/auth/profile/update`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(form),
-      });
-
-      const data = await res.json();
-      if (!res.ok) return setMsg(data.message);
-
-      setMsg("Profile Updated Successfully");
+  const updateMutation = useMutation({
+    mutationFn: async (updateData) => {
+      const response = await api.put("/api/auth/profile/update", updateData);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["user-profile"]);
+      toast.success("Profile Updated Successfully");
       setEditMode(false);
-      fetchProfile();
-      setTimeout(() => setMsg(""), 3000);
-    } catch {
-      setMsg("Update Failed");
+    },
+    onError: (error) => {
+      const errorMessage = error.response?.data?.message || "Update Failed";
+      toast.error(errorMessage);
+    },
+  });
+
+  const handleUpdateProfile = () => {
+    updateMutation.mutate(form);
+  };
+
+  const handleCancelEdit = () => {
+    setEditMode(false);
+    if (user) {
+      setForm({
+        name: user.name || "",
+        phone: user.phone || "",
+        bio: user.bio || "",
+        address: user.address || "",
+        country: user.country || "",
+        city: user.city || "",
+        zip: user.zip || "",
+        profileImage: user.profileImage || "",
+      });
     }
   };
 
-  if (loading)
+  if (isLoading)
     return (
       <div className="flex items-center justify-center min-h-screen bg-black">
-        <div className="text-white text-lg animate-pulse">Loading...</div>
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-10 h-10 text-blue-400 animate-spin" />
+          <div className="text-white text-lg">Loading Profile...</div>
+        </div>
       </div>
     );
 
@@ -156,21 +161,6 @@ const UserProfile = () => {
 
       <div className="relative z-10 flex justify-center px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <div className="w-full max-w-6xl pt-32">
-          <AnimatePresence>
-            {msg && (
-              <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="mb-4"
-              >
-                <div className="bg-green-600/90 border border-green-500 text-white p-3 rounded-xl text-center text-sm">
-                  {msg}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -239,18 +229,24 @@ const UserProfile = () => {
                       <div className="flex gap-2 w-full sm:w-auto">
                         <button
                           className="flex-1 sm:flex-none px-4 py-2 text-sm bg-black/40 border border-white/20 hover:bg-black/60 text-white rounded-xl transition font-medium"
-                          onClick={() => {
-                            setEditMode(false);
-                            fetchProfile();
-                          }}
+                          onClick={handleCancelEdit}
+                          disabled={updateMutation.isPending}
                         >
                           Cancel
                         </button>
                         <button
-                          className="flex-1 sm:flex-none px-4 py-2 text-sm bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:scale-[1.03] transition font-medium"
-                          onClick={updateProfile}
+                          className="flex-1 sm:flex-none px-4 py-2 text-sm bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:scale-[1.03] transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={handleUpdateProfile}
+                          disabled={updateMutation.isPending}
                         >
-                          Save Changes
+                          {updateMutation.isPending ? (
+                            <span className="flex items-center gap-2">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Saving...
+                            </span>
+                          ) : (
+                            "Save Changes"
+                          )}
                         </button>
                       </div>
                     ) : (
@@ -287,6 +283,7 @@ const UserProfile = () => {
                                   [field.key]: e.target.value,
                                 })
                               }
+                              disabled={updateMutation.isPending}
                             />
                           ) : (
                             <p className="bg-black/30 border border-white/10 p-2.5 rounded-xl text-gray-200 text-sm">
@@ -307,6 +304,7 @@ const UserProfile = () => {
                             onChange={(e) =>
                               setForm({ ...form, bio: e.target.value })
                             }
+                            disabled={updateMutation.isPending}
                           />
                         ) : (
                           <p className="bg-black/30 border border-white/10 p-2.5 rounded-xl text-gray-200 min-h-[80px] text-sm">
@@ -360,7 +358,7 @@ const UserProfile = () => {
                     <p className="text-gray-400 text-xs sm:text-sm">
                       Delete account permanently
                     </p>
-                    <button className="mt-3 px-4 py-2 text-sm bg-gradient-to-r from-red-600 to-red-700 rounded-xl text-white">
+                    <button className="mt-3 px-4 py-2 text-sm bg-gradient-to-r from-red-600 to-red-700 rounded-xl text-white hover:scale-[1.03] transition">
                       Delete Account
                     </button>
                   </div>

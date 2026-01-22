@@ -1,17 +1,16 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "react-hot-toast";
+import api from "../../../utils/api";
 
 const UserLogin = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [isMobile, setIsMobile] = useState(false);
-
-  const baseURL = import.meta.env.VITE_DataHost;
+  const navigate = useNavigate();
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -20,50 +19,30 @@ const UserLogin = () => {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
-    setLoading(true);
-
-    try {
-      const res = await fetch(`${baseURL}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.message || "Login Failed");
-        setLoading(false);
-        return;
-      }
-
+  const loginMutation = useMutation({
+    mutationFn: async (credentials) => {
+      const response = await api.post("/api/auth/login", credentials);
+      return response.data;
+    },
+    onSuccess: (data) => {
       localStorage.setItem("userToken", data.token);
       localStorage.setItem("userInfo", JSON.stringify(data.user));
+      toast.success("Login Successful! Redirecting...");
+      setTimeout(() => navigate("/profile"), 1200);
+    },
+    onError: (error) => {
+      const errorMessage = error.response?.data?.message || "Login Failed";
+      toast.error(errorMessage);
+    },
+  });
 
-      setSuccess("Login Successful! Redirecting...");
-      setTimeout(() => (window.location.href = "/profile"), 1200);
-    } catch {
-      setError("Something went wrong");
-    }
-
-    setLoading(false);
+  const handleLogin = (e) => {
+    e.preventDefault();
+    loginMutation.mutate({ email, password });
   };
 
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-black overflow-hidden px-4 sm:px-6">
-      {success && (
-        <motion.div
-          initial={{ y: -50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="absolute top-5 z-50 bg-green-600/90 text-white px-6 py-3 rounded-xl shadow-lg text-sm sm:text-base font-semibold"
-        >
-          {success}
-        </motion.div>
-      )}
-
       <motion.div
         className="absolute inset-0 bg-gradient-to-br from-blue-900/20 via-purple-900/10 to-black"
         animate={{ backgroundPosition: ["0% 0%", "100% 100%", "0% 0%"] }}
@@ -126,8 +105,6 @@ const UserLogin = () => {
           Welcome back to Neterskill 🚀
         </p>
 
-        {error && <p className="text-red-400 text-sm mt-3 px-2">{error}</p>}
-
         <form onSubmit={handleLogin} className="mt-6 text-left">
           <label className="text-gray-300 text-sm">Email</label>
           <input
@@ -137,6 +114,7 @@ const UserLogin = () => {
             placeholder="example@gmail.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            disabled={loginMutation.isPending}
           />
 
           <label className="text-gray-300 text-sm">Password</label>
@@ -148,6 +126,7 @@ const UserLogin = () => {
               placeholder="********"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              disabled={loginMutation.isPending}
             />
 
             <span
@@ -159,15 +138,16 @@ const UserLogin = () => {
           </div>
 
           <button
-            disabled={loading}
-            className="w-full py-3 sm:py-3.5 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold hover:scale-[1.03] active:scale-[0.99] transition-all shadow-lg text-sm sm:text-base"
+            type="submit"
+            disabled={loginMutation.isPending}
+            className="w-full py-3 sm:py-3.5 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold hover:scale-[1.03] active:scale-[0.99] transition-all shadow-lg text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? "Logging in..." : "Login"}
+            {loginMutation.isPending ? "Logging in..." : "Login"}
           </button>
         </form>
 
         <div className="mt-5 text-gray-300 text-sm">
-          Don’t have an account?
+          Don't have an account?
           <Link
             to="/register"
             className="text-blue-400 font-semibold hover:underline ml-1"

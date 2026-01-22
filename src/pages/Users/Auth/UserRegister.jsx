@@ -2,7 +2,10 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, Link } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "react-hot-toast";
 import { User, Phone, Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
+import api from "../../../utils/api";
 
 const UserRegister = () => {
   const [name, setName] = useState("");
@@ -12,13 +15,8 @@ const UserRegister = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
-
-  const baseURL = import.meta.env.VITE_DataHost;
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -26,6 +24,24 @@ const UserRegister = () => {
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
+
+  const registerMutation = useMutation({
+    mutationFn: async (userData) => {
+      const response = await api.post("/api/auth/register", userData);
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success("Registration Successful! Redirecting...");
+      setTimeout(() => {
+        navigate("/verify-email", { state: { email } });
+      }, 800);
+    },
+    onError: (error) => {
+      const errorMessage =
+        error.response?.data?.message || "Registration Failed";
+      toast.error(errorMessage);
+    },
+  });
 
   const calculatePasswordStrength = (pass) => {
     if (!pass) return 0;
@@ -57,57 +73,31 @@ const UserRegister = () => {
     return "Strong";
   };
 
-  const handleRegister = async (e) => {
+  const handleRegister = (e) => {
     e.preventDefault();
-    setError("");
-    setSuccess("");
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      toast.error("Passwords do not match");
       return;
     }
 
     if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+      toast.error("Password must be at least 6 characters");
       return;
     }
 
     if (phone.length < 10) {
-      setError("Enter a valid phone number (min 10 digits)");
+      toast.error("Enter a valid phone number (min 10 digits)");
       return;
     }
 
-    setLoading(true);
-
-    try {
-      const res = await fetch(`${baseURL}/api/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, phone, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.message || "Registration Failed");
-        setLoading(false);
-        return;
-      }
-
-      setSuccess("Registration Successful! Redirecting...");
-      setTimeout(() => {
-        navigate("/verify-email", { state: { email } });
-      }, 800);
-    } catch {
-      setError("Something went wrong. Please try again.");
-      setLoading(false);
-    }
+    registerMutation.mutate({ name, email, phone, password });
   };
 
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-black overflow-hidden px-4 sm:px-6">
       <AnimatePresence>
-        {loading && (
+        {registerMutation.isPending && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -200,30 +190,6 @@ const UserRegister = () => {
           Join Neterskill and start your journey 🚀
         </p>
 
-        <AnimatePresence mode="wait">
-          {success && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="w-full mt-4 mb-2 bg-green-500/15 border border-green-400/40 text-green-300 py-3 px-4 rounded-xl text-sm font-medium"
-            >
-              ✓ {success}
-            </motion.div>
-          )}
-
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="w-full mt-4 mb-2 bg-red-500/15 border border-red-400/40 text-red-300 py-3 px-4 rounded-xl text-sm font-medium"
-            >
-              ✕ {error}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <form onSubmit={handleRegister} className="mt-6 text-left space-y-4">
           <div>
             <label className="text-gray-300 text-sm font-medium flex items-center gap-2 mb-1.5">
@@ -236,6 +202,7 @@ const UserRegister = () => {
               placeholder="John Doe"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={registerMutation.isPending}
             />
           </div>
 
@@ -250,6 +217,7 @@ const UserRegister = () => {
               placeholder="+8801XXXXXXXXX"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              disabled={registerMutation.isPending}
             />
           </div>
 
@@ -264,6 +232,7 @@ const UserRegister = () => {
               placeholder="example@gmail.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              disabled={registerMutation.isPending}
             />
           </div>
 
@@ -279,11 +248,13 @@ const UserRegister = () => {
                 placeholder="Minimum 6 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={registerMutation.isPending}
               />
               <button
                 type="button"
                 onClick={() => setShowPass(!showPass)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition"
+                disabled={registerMutation.isPending}
               >
                 {showPass ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
@@ -332,11 +303,13 @@ const UserRegister = () => {
                 placeholder="Re-enter your password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
+                disabled={registerMutation.isPending}
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPass(!showConfirmPass)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition"
+                disabled={registerMutation.isPending}
               >
                 {showConfirmPass ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
@@ -345,12 +318,12 @@ const UserRegister = () => {
 
           <motion.button
             type="submit"
-            disabled={loading}
-            whileHover={{ scale: loading ? 1 : 1.02 }}
-            whileTap={{ scale: loading ? 1 : 0.98 }}
+            disabled={registerMutation.isPending}
+            whileHover={{ scale: registerMutation.isPending ? 1 : 1.02 }}
+            whileTap={{ scale: registerMutation.isPending ? 1 : 0.98 }}
             className="w-full py-3.5 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-2"
           >
-            {loading ? (
+            {registerMutation.isPending ? (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 className="w-5 h-5 animate-spin" />
                 Creating Account...

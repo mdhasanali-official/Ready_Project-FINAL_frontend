@@ -1,21 +1,19 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "react-hot-toast";
+import api from "../../../utils/api";
 
 const VerifyEmail = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const passedEmail = location?.state?.email || "";
 
   const [code, setCode] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [resending, setResending] = useState(false);
-  const [success, setSuccess] = useState("");
-  const [error, setError] = useState("");
   const [timeLeft, setTimeLeft] = useState(600);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
-
-  const baseURL = import.meta.env.VITE_DataHost;
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -42,74 +40,61 @@ const VerifyEmail = () => {
     return `${m}:${s < 10 ? "0" : ""}${s}`;
   };
 
-  const handleVerify = async (e) => {
+  const verifyMutation = useMutation({
+    mutationFn: async (data) => {
+      const response = await api.post("/api/auth/verify-email", data);
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success("Email Verified Successfully! Redirecting to login...");
+      setTimeout(() => navigate("/login"), 1200);
+    },
+    onError: (error) => {
+      const errorMessage =
+        error.response?.data?.message || "Verification Failed";
+      toast.error(errorMessage);
+    },
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: async (data) => {
+      const response = await api.post("/api/auth/resend-code", data);
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success("A new verification code has been sent!");
+      setTimeLeft(600);
+      setResendCooldown(30);
+    },
+    onError: (error) => {
+      const errorMessage =
+        error.response?.data?.message || "Failed to resend code";
+      toast.error(errorMessage);
+
+      // Extract cooldown seconds from error message
+      const sec = parseInt(errorMessage?.match(/\d+/)?.[0]);
+      if (!isNaN(sec)) setResendCooldown(sec);
+    },
+  });
+
+  const handleVerify = (e) => {
     e.preventDefault();
-    setError("");
-    setSuccess("");
-    setLoading(true);
 
     if (!passedEmail) {
-      setError("Something went wrong! Please register again.");
-      setLoading(false);
+      toast.error("Something went wrong! Please register again.");
       return;
     }
 
-    try {
-      const res = await fetch(`${baseURL}/api/auth/verify-email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: passedEmail, code }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.message || "Verification Failed");
-        setLoading(false);
-        return;
-      }
-
-      setSuccess("Email Verified Successfully! Redirecting to login...");
-      setTimeout(() => (window.location.href = "/login"), 1200);
-    } catch {
-      setError("Something went wrong");
-    }
-
-    setLoading(false);
+    verifyMutation.mutate({ email: passedEmail, code });
   };
 
-  const handleResend = async () => {
-    setError("");
-    setSuccess("");
-    setResending(true);
-
-    try {
-      const res = await fetch(`${baseURL}/api/auth/resend-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: passedEmail }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.message || "Failed to resend code");
-
-        const sec = parseInt(data.message?.match(/\d+/)?.[0]);
-        if (!isNaN(sec)) setResendCooldown(sec);
-
-        setResending(false);
-        return;
-      }
-
-      setSuccess("A new verification code has been sent!");
-      setTimeLeft(600);
-      setResendCooldown(30);
-    } catch {
-      setError("Something went wrong");
+  const handleResend = () => {
+    if (!passedEmail) {
+      toast.error("Something went wrong! Please register again.");
+      return;
     }
 
-    setResending(false);
+    resendMutation.mutate({ email: passedEmail });
   };
 
   return (
@@ -151,26 +136,6 @@ const VerifyEmail = () => {
           Enter the verification code we sent to your email 📩
         </p>
 
-        {success && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="w-full mt-4 mb-2 bg-green-500/15 border border-green-400/40 text-green-300 py-3 px-4 rounded-xl text-sm"
-          >
-            {success}
-          </motion.div>
-        )}
-
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="w-full mt-4 mb-2 bg-red-500/15 border border-red-400/40 text-red-300 py-3 px-4 rounded-xl text-sm"
-          >
-            {error}
-          </motion.div>
-        )}
-
         <div className="text-gray-300 text-sm mt-4">
           OTP Expires In:{" "}
           <span className="text-blue-400 font-semibold">
@@ -188,20 +153,23 @@ const VerifyEmail = () => {
             placeholder="123456"
             value={code}
             onChange={(e) => setCode(e.target.value)}
+            disabled={verifyMutation.isPending}
           />
 
           <button
-            disabled={loading}
-            className="w-full py-3 sm:py-3.5 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold hover:scale-[1.03] active:scale-[0.99] transition-all shadow-lg"
+            type="submit"
+            disabled={verifyMutation.isPending}
+            className="w-full py-3 sm:py-3.5 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold hover:scale-[1.03] active:scale-[0.99] transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? "Verifying..." : "Verify Email"}
+            {verifyMutation.isPending ? "Verifying..." : "Verify Email"}
           </button>
         </form>
 
         <div className="mt-4 text-gray-300 text-sm">
           Didn't receive code?
           <button
-            disabled={resending || resendCooldown > 0}
+            type="button"
+            disabled={resendMutation.isPending || resendCooldown > 0}
             onClick={handleResend}
             className={`ml-2 ${
               resendCooldown > 0
@@ -209,11 +177,11 @@ const VerifyEmail = () => {
                 : "text-blue-400 hover:underline"
             }`}
           >
-            {resending
+            {resendMutation.isPending
               ? "Resending..."
               : resendCooldown > 0
-              ? `Resend in ${resendCooldown}s`
-              : "Resend Code"}
+                ? `Resend in ${resendCooldown}s`
+                : "Resend Code"}
           </button>
         </div>
       </motion.div>
